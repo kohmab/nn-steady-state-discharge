@@ -10,10 +10,20 @@ def to_torch(*args):
             result.append(arg.float())
     return tuple(result)
 
+def beam_field(points, max_field=1.):
+    z = points[:, [0]]
+    r = points[:, [1]]
 
-a = np.zeros(3)
-b = torch.zeros(1)
-c = np.eye(1)
-d = torch.eye(2)
+    ksi = 1. + 1.j * z
 
-print(to_torch(a, b, c, d))
+    module = None
+    if torch.is_tensor(r) ^ torch.is_tensor(z):
+        raise RuntimeError("Incompatible argument types")
+    if torch.is_tensor(r):
+        module = torch
+    else:
+        module = np
+
+    field = max_field * module.exp(- module.square(r)/ 2. / ksi) / ksi
+    return module.hstack((field.real, field.imag))
+
