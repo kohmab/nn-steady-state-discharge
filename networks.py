@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from configuration import Configuration
+from parametersholder import ParametersHolder
 from helpers import beam_field
 
 
@@ -86,17 +86,17 @@ class Pidonet(nn.Module):
     def __init__(self):
         super().__init__()
         self.branch = MLP(2,
-                          Configuration().branch_and_trunk_out_features,
-                          Configuration().branch_hidden_features,
-                          Configuration().branch_hidden_layers)
+                          ParametersHolder().branch_and_trunk_out_features,
+                          ParametersHolder().branch_hidden_features,
+                          ParametersHolder().branch_hidden_layers)
 
         self.trunk = MLP(4,
-                         Configuration().branch_and_trunk_out_features,
-                         Configuration().trunk_hidden_features,
-                         Configuration().trunk_hidden_layers,
+                         ParametersHolder().branch_and_trunk_out_features,
+                         ParametersHolder().trunk_hidden_features,
+                         ParametersHolder().trunk_hidden_layers,
                          activator=torch.nn.ReLU)
 
-        self.mixer = Mixer(Configuration().branch_and_trunk_out_features, 2)
+        self.mixer = Mixer(ParametersHolder().branch_and_trunk_out_features, 2)
 
     def forward(self, z, r, params):
         branch_in = torch.hstack((z, r))

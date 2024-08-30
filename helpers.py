@@ -2,13 +2,19 @@ import numpy as np
 import torch
 from pyDOE import lhs
 
-from configuration import Configuration
+from parametersholder import ParametersHolder
 
 
 def prepare_tensor(array, requires_grad=True):
-    return (torch.from_numpy(array).
-            to(device=Configuration().device, dtype=Configuration().dtype)
-            .requires_grad_(requires_grad))
+    device = ParametersHolder().device
+    dtype = ParametersHolder().dtype
+
+    if not torch.is_tensor(array):
+        tensor = torch.from_numpy(array)
+    else:
+        tensor = array
+
+    return tensor.to(device=device, dtype=dtype).requires_grad_(requires_grad)
 
 
 def beam_field(points, max_field=1.0):
@@ -42,5 +48,5 @@ def uniform(N, l, r, dim=1):
 
 
 def grad(y, x):
-    ones = torch.ones_like(y, device=Configuration().device, dtype=Configuration().dtype, requires_grad=False)
+    ones = torch.ones_like(y, device=ParametersHolder().device, dtype=ParametersHolder().dtype, requires_grad=False)
     return torch.autograd.grad(y, x, ones, create_graph=True)[0]
