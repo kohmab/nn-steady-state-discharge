@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 
+from configuration import Configuration
 from helpers import beam_field
 
 
@@ -31,7 +32,7 @@ class MLP(nn.Module):
         return x
 
 
-class FourierFeatTransform(nn.Module):
+class FeatTransform(nn.Module):
     def __init__(self, lb, ub, nin=2):
         if not (nin == len(lb) and nin == len(lb)):
             raise RuntimeError("wrong dimentions")
@@ -54,7 +55,7 @@ class FourierFeatTransform(nn.Module):
 
         inp = self.B(inp)
 
-        out = torch.empty(inp.shape[0], 2 * self.nin,device="cuda").float()
+        out = torch.empty(inp.shape[0], 2 * self.nin, device="cuda").float()
 
         for i in range(self.nin):
             out[:, i] = torch.cos(inp[:, i])
@@ -64,9 +65,45 @@ class FourierFeatTransform(nn.Module):
 
 
 class AnalyticNet(nn.Module):
-    def __init__(self, max_field=1.0):
+    def __init__(self):
         super().__init__()
-        self.max_field = max_field
+    def forward(self, z, r, params):
+        inp = torch.hstack((z, r))
+        max_field = params[:, [0]]
+        return beam_field(inp, max_field)
 
-    def forward(self, inp):
-        return beam_field(inp, max_field=self.max_field)
+
+class Mixer(nn.Module):
+    def __init__(self, bs_and_ts: int, out_feat):
+        super().__init__()
+        self.fc = nn.Linear(bs_and_ts, out_feat)
+
+    def forward(self, branch, trunk):
+        return self.fc(branch * trunk)
+
+
+class Pidonet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.branch = MLP(2,
+                          Configuration().branch_and_trunk_out_features,
+                          Configuration().branch_hidden_features,
+                          Configuration().branch_hidden_layers)
+
+        self.trunk = MLP(4,
+                         Configuration().branch_and_trunk_out_features,
+                         Configuration().trunk_hidden_features,
+                         Configuration().trunk_hidden_layers,
+                         activator=torch.nn.ReLU)
+
+        self.mixer = Mixer(Configuration().branch_and_trunk_out_features, 2)
+
+    def forward(self, z, r, params):
+        branch_in = torch.hstack((z, r))
+        branch_out = self.branch(branch_in)
+
+        trunk_out = self.trunk(params)
+
+        out = self.mixer(branch_out, trunk_out)
+
+        return out

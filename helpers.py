@@ -1,29 +1,46 @@
 import numpy as np
 import torch
+from pyDOE import lhs
 
-def to_torch(*args):
-    result = []
-    for arg in args:
-        if not torch.is_tensor(arg):
-            result.append(torch.from_numpy(arg).float())
-        else:
-            result.append(arg.float())
-    return tuple(result)
+from configuration import Configuration
 
-def beam_field(points, max_field=1.):
+
+def prepare_tensor(array, requires_grad=True):
+    return (torch.from_numpy(array).
+            to(device=Configuration().device, dtype=Configuration().dtype)
+            .requires_grad_(requires_grad))
+
+
+def beam_field(points, max_field=1.0):
+    if torch.is_tensor(points):
+        module = torch
+    else:
+        module = np
+
     z = points[:, [0]]
     r = points[:, [1]]
 
     ksi = 1. + 1.j * z
 
-    module = None
-    if torch.is_tensor(r) ^ torch.is_tensor(z):
-        raise RuntimeError("Incompatible argument types")
-    if torch.is_tensor(r):
-        module = torch
-    else:
-        module = np
-
-    field = max_field * module.exp(- module.square(r)/ 2. / ksi) / ksi
+    field = max_field * module.exp(- module.square(r) / 2. / ksi) / ksi
     return module.hstack((field.real, field.imag))
 
+
+def plasma_density(field_components, p, K0):
+    if not torch.is_tensor(field_components):
+        raise RuntimeError()
+
+    abs_E_sqred = field_components[:, [0]].pow(2) + field_components[:, [1]].pow(2)
+
+    density = torch.where(abs_E_sqred > 1., (abs_E_sqred.pow(p) - 1) * K0, 0)
+
+    return density
+
+
+def uniform(N, l, r, dim=1):
+    return l + (r - l) * lhs(dim, N)
+
+
+def grad(y, x):
+    ones = torch.ones_like(y, device=Configuration().device, dtype=Configuration().dtype, requires_grad=False)
+    return torch.autograd.grad(y, x, ones, create_graph=True)[0]
