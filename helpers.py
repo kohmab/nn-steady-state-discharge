@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from pyDOE import lhs
+from torch.autograd import Function
 
 from parametersholder import ParametersHolder
 
@@ -50,3 +51,16 @@ def uniform(N, l, r, dim=1):
 def grad(y, x):
     ones = torch.ones_like(y, device=ParametersHolder().device, dtype=ParametersHolder().dtype, requires_grad=False)
     return torch.autograd.grad(y, x, ones, create_graph=True)[0]
+
+
+class BesselJ0(Function):
+    @staticmethod
+    def forward(ctx, input):
+        ctx.save_for_backward(input)
+        result = torch.special.bessel_j0(input)
+        return result
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        input, = ctx.saved_tensors
+        return -grad_output * torch.special.bessel_j1(input)

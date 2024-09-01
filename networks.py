@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 
+from helpers import beam_field, BesselJ0
 from parametersholder import ParametersHolder
-from helpers import beam_field
 
 
 class MLP(nn.Module):
@@ -32,7 +32,7 @@ class MLP(nn.Module):
         return x
 
 
-class FeatTransform(nn.Module):
+class NaiveFeatTransform(nn.Module):
     def __init__(self, lb, ub, nin=2):
         if not (nin == len(lb) and nin == len(lb)):
             raise RuntimeError("wrong dimentions")
@@ -67,6 +67,7 @@ class FeatTransform(nn.Module):
 class AnalyticNet(nn.Module):
     def __init__(self):
         super().__init__()
+
     def forward(self, z, r, params):
         inp = torch.hstack((z, r))
         max_field = params[:, [0]]
@@ -100,6 +101,51 @@ class Pidonet(nn.Module):
 
     def forward(self, z, r, params):
         branch_in = torch.hstack((z, r))
+        branch_out = self.branch(branch_in)
+
+        trunk_out = self.trunk(params)
+
+        out = self.mixer(branch_out, trunk_out)
+
+        return out
+
+
+class BesselFeatEmb(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.Nbess = ParametersHolder().bessel_features
+        self.wavenumbers = nn.Linear(1, self.Nbess, bias=False)
+        self.amplitudes = nn.parameter.Parameter(torch.randn((1, self.Nbess)), requires_grad=True)
+
+        nn.init.normal_(self.wavenumbers.weight.data)
+        # nn.init.normal_(self.amplitudes.weight.data)
+
+    def forward(self, r):
+        kr = self.wavenumbers(r)
+        bessel0 = BesselJ0.apply(kr)
+        return self.amplitudes * bessel0
+
+
+class BessFeatPIDeepONet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.bess_feat = BesselFeatEmb()
+        self.branch = MLP(ParametersHolder().bessel_features + 1,
+                          ParametersHolder().branch_and_trunk_out_features,
+                          ParametersHolder().branch_hidden_features,
+                          ParametersHolder().branch_hidden_layers)
+
+        self.trunk = MLP(4,
+                         ParametersHolder().branch_and_trunk_out_features,
+                         ParametersHolder().trunk_hidden_features,
+                         ParametersHolder().trunk_hidden_layers,
+                         activator=torch.nn.SiLU)
+
+        self.mixer = Mixer(ParametersHolder().branch_and_trunk_out_features, 2)
+
+    def forward(self, z, r, params):
+        bessel_feat = self.bess_feat(r)
+        branch_in = torch.hstack((z, bessel_feat))
         branch_out = self.branch(branch_in)
 
         trunk_out = self.trunk(params)
