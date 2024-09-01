@@ -115,15 +115,14 @@ class BesselFeatEmb(nn.Module):
         super().__init__()
         self.Nbess = ParametersHolder().bessel_features
         self.wavenumbers = nn.Linear(1, self.Nbess, bias=False)
-        self.amplitudes = nn.parameter.Parameter(torch.randn((1, self.Nbess)), requires_grad=True)
 
-        nn.init.normal_(self.wavenumbers.weight.data)
+        self.wavenumbers.weight.data = torch.randn(self.Nbess, dtype=ParametersHolder().dtype)[:, None]
         # nn.init.normal_(self.amplitudes.weight.data)
 
     def forward(self, r):
         kr = self.wavenumbers(r)
-        bessel0 = BesselJ0.apply(kr)
-        return self.amplitudes * bessel0
+        bessels = BesselJ0.apply(kr)
+        return bessels
 
 
 class BessFeatPIDeepONet(nn.Module):

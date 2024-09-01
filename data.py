@@ -118,7 +118,7 @@ class JointDataLoaders:
     def _reset_one(self, name):
         self._iterators[name] = iter(self._dataloaders[name])
 
-    def _prepare_data(self, name):
+    def _prepare_batch(self, name):
         arrays_tuple = next(self._iterators[name])
 
         tensors = [prepare_tensor(array) for array in arrays_tuple]
@@ -134,14 +134,14 @@ class JointDataLoaders:
     def __next__(self):
         for name in self._iterators:
             try:
-                self._data[name] = self._prepare_data(name)
+                self._data[name] = self._prepare_batch(name)
             except StopIteration:
                 if name == "main":
                     self._reset_all()
                     raise StopIteration
                 else:
                     self._reset_one(name)
-                    self._data[name] = self._prepare_data(name)
+                    self._data[name] = self._prepare_batch(name)
 
         self.count += 1
 

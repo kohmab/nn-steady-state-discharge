@@ -34,12 +34,14 @@ def beam_field(points, max_field=1.0):
 
 
 def plasma_density(field_components, p, K0):
-    if not torch.is_tensor(field_components):
-        raise RuntimeError()
+    if torch.is_tensor(field_components):
+        module = torch
+    else:
+        module = np
 
-    abs_E_sqred = field_components[:, [0]].pow(2) + field_components[:, [1]].pow(2)
+    abs_E_sqred = field_components[:, [0]] ** 2 + field_components[:, [1]] ** 2
 
-    density = torch.where(abs_E_sqred > 1., (abs_E_sqred.pow(p) - 1) * K0, 0)
+    density = module.where(abs_E_sqred > 1., (abs_E_sqred ** p - 1) * K0, 0.)
 
     return density
 
