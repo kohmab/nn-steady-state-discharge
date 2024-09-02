@@ -18,14 +18,14 @@ def prepare_tensor(array, requires_grad=True):
     return tensor.to(device=device, dtype=dtype).requires_grad_(requires_grad)
 
 
-def beam_field(points, max_field=1.0):
-    if torch.is_tensor(points):
+def beam_field(coordinates, max_field=1.0):
+    if torch.is_tensor(coordinates):
         module = torch
     else:
         module = np
 
-    z = points[:, [0]]
-    r = points[:, [1]]
+    z = coordinates[:, [0]]
+    r = coordinates[:, [1]]
 
     ksi = 1. + 1.j * z
 
