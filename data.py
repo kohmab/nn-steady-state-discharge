@@ -1,15 +1,21 @@
-from abc import abstractmethod, ABC
-from typing import Dict
+from typing import Dict, Optional
 
-import numpy as np
+from torch import Tensor
 from torch.utils.data import Dataset, DataLoader
-from parametersholder import ParametersHolder
+
 from helpers import uniform, beam_field, prepare_tensor
+from hyperdomain import *
+
+_DEVICE = PARAMETERS.torch.device
+_DTYPE = PARAMETERS.torch.dtype
+_LOWER_BOUNDARIES = HYPERDOMAIN.lb
+_UPPER_BOUNDARIES = HYPERDOMAIN.ub
+_DIM = HYPERDOMAIN.dim
 
 
 class AbstractDataset(Dataset, ABC):
-    _points: np.ndarray
-    _target: np.ndarray
+    _points: Tensor
+    _target: Optional[Tensor]
 
     _N: int
 
@@ -17,7 +23,14 @@ class AbstractDataset(Dataset, ABC):
         self._N = Npoints
         self._points = None
         self._target = None
+        self.refresh()
+
+    def refresh(self):
+        self._generate_points()
         self._generate_data()
+
+    def _generate_points(self):
+        self._points = uniform(self.N, _LOWER_BOUNDARIES, _UPPER_BOUNDARIES, dim=_DIM)
 
     @abstractmethod
     def _generate_data(self):
@@ -39,61 +52,51 @@ class AbstractDataset(Dataset, ABC):
         return self._N
 
     def __getitem__(self, idx):
-        indices = {"z": slice(0, 1), "r": slice(1, 2), "params": slice(2, None)}  # TODO move from here
-
-        result = [self.points[idx, indices["z"]],
-                  self.points[idx, indices["r"]],
-                  self.points[idx, indices["params"]]]
+        result = [self.points[idx, [AXIDX.z]],
+                  self.points[idx, [AXIDX.r]],
+                  self.points[idx, AXIDX.max_field:]]
         if self.target is not None:
             result.append(self.target[idx, :])
+        if idx == self._N - 1:
+            self.refresh()
         return tuple(result)
 
 
 class DomainData(AbstractDataset):
     def __init__(self):
-        super().__init__(ParametersHolder().Npoints)
+        super().__init__(PARAMETERS.data.num_of_points.eq)
 
     def _generate_data(self):
-        lb = ParametersHolder().get_lb()
-        ub = ParametersHolder().get_ub()
-
-        self._points = uniform(self.N, lb, ub, dim=len(lb))
+        return
 
 
 class BcAtAxisData(AbstractDataset):
     def __init__(self):
-        super().__init__(ParametersHolder().Npoints_for_boundary_conditions)
+        super().__init__(PARAMETERS.data.num_of_points.bc)
 
     def _generate_data(self):
-        lb = ParametersHolder().get_lb()
-        ub = ParametersHolder().get_ub()
-        ub[1] = lb[1]
-        self._points = uniform(self.N, lb, ub, dim=len(lb))
+        self._points[1, :] = _LOWER_BOUNDARIES[1]
 
 
 class BcAtUpperRLimitData(AbstractDataset):
     def __init__(self):
-        super().__init__(ParametersHolder().Npoints_for_boundary_conditions)
+        super().__init__(PARAMETERS.data.num_of_points.bc)
 
     def _generate_data(self):
-        lb = ParametersHolder().get_lb()
-        ub = ParametersHolder().get_ub()
-        lb[1] = ub[1]
-        self._points = uniform(self.N, lb, ub, dim=len(lb))
-        self._target = beam_field(self._points[:, 0:2], max_field=self._points[:, [2]])  # TODO use idx
+        self._points[1, :] = _UPPER_BOUNDARIES[1]
+        self._target = beam_field(self._points[:, AXIDX.z:AXIDX.max_field],
+                                  max_field=self._points[:, [AXIDX.max_field]])
 
 
 class IcData(AbstractDataset):
 
     def __init__(self):
-        super().__init__(ParametersHolder().Npoints_for_initial_condition)
+        super().__init__(PARAMETERS.data.num_of_points.ic)
 
     def _generate_data(self):
-        lb = ParametersHolder().get_lb()
-        ub = ParametersHolder().get_ub()
-        ub[0] = lb[0]
-        self._points = uniform(self.N, lb, ub, dim=len(lb))
-        self._target = beam_field(self._points[:, 0:2], max_field=self._points[:, [2]])  # TODO use idx
+        self._points[0, :] = _LOWER_BOUNDARIES[0]
+        self._target = beam_field(self._points[:, AXIDX.z:AXIDX.max_field],
+                                  max_field=self._points[:, [AXIDX.max_field]])
 
 
 class JointDataLoaders:

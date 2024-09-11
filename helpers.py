@@ -1,21 +1,19 @@
 import numpy as np
 import torch
-from pyDOE import lhs
 from torch.autograd import Function
 
-from parametersholder import ParametersHolder
+from configuration import PARAMETERS
 
+_DEVICE = PARAMETERS.torch.device
+_DTYPE = PARAMETERS.torch.dtype
 
 def prepare_tensor(array, requires_grad=True):
-    device = ParametersHolder().device
-    dtype = ParametersHolder().dtype
-
     if not torch.is_tensor(array):
         tensor = torch.from_numpy(array)
     else:
         tensor = array
 
-    return tensor.to(device=device, dtype=dtype).requires_grad_(requires_grad)
+    return tensor.to(device=_DEVICE, dtype=_DTYPE).requires_grad_(requires_grad)
 
 
 def beam_field(coordinates, max_field=1.0):
@@ -46,12 +44,27 @@ def plasma_density(field_components, p, K0):
     return density
 
 
-def uniform(N, l, r, dim=1):
-    return l + (r - l) * lhs(dim, N)
+def latin_hypercube_sampling(n_dimensions, n_samples):
+    perm = torch.stack([torch.randperm(n_samples, device=_DEVICE) for _ in range(n_dimensions)], dim=1)
+
+    random_points = torch.rand(n_samples, n_dimensions, device=_DEVICE, dtype=_DTYPE)
+
+    samples = (perm.float() + random_points) / n_samples
+
+    return samples
+
+
+def uniform(num_points, lower_limits, upper_limits, dim=1):
+    if not torch.is_tensor(lower_limits):
+        lower_limits = torch.from_numpy(lower_limits).to(device=_DEVICE, dtype=_DTYPE)
+    if not torch.is_tensor(upper_limits):
+        upper_limits = torch.from_numpy(upper_limits).to(device=_DEVICE, dtype=_DTYPE)
+
+    return lower_limits + (upper_limits - lower_limits) * latin_hypercube_sampling(dim, num_points)
 
 
 def grad(y, x):
-    ones = torch.ones_like(y, device=ParametersHolder().device, dtype=ParametersHolder().dtype, requires_grad=False)
+    ones = torch.ones_like(y, device=_DEVICE, dtype=_DTYPE, requires_grad=False)
     return torch.autograd.grad(y, x, ones, create_graph=True)[0]
 
 

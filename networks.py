@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 from helpers import beam_field, BesselJ0
-from parametersholder import ParametersHolder
+from configuration import PARAMETERS
 
 
 class AnalyticNet(nn.Module):
@@ -16,7 +16,7 @@ class AnalyticNet(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, nin=2, nout=2, nhid=16, nlay=4, activator=torch.nn.Tanh):
+    def __init__(self, nin=2, nout=2, nhid=16, nlay=4, activator=torch.nn.Tanh, with_final_activator=False):
         super().__init__()
 
         self.nlayers = nlay
@@ -29,6 +29,8 @@ class MLP(nn.Module):
             self.layers.append(nn.Linear(nhid, nhid))
             self.layers.append(activator())
         self.layers.append(nn.Linear(nhid, nout))
+        if with_final_activator:
+            self.layers.append(activator())
 
         for i, lay in enumerate(self.layers):
             if i % 2 == 0:
@@ -54,24 +56,26 @@ class Mixer(nn.Module):
 class Pidonet(nn.Module):
     def __init__(self):
         super().__init__()
-        self.branch = MLP(2,
-                          ParametersHolder().branch_and_trunk_out_features,
-                          ParametersHolder().branch_hidden_features,
-                          ParametersHolder().branch_hidden_layers)
+        self.trunk = MLP(2,
+                         PARAMETERS.model.mixer.in_features,
+                         PARAMETERS.model.trunk.hidden_features,
+                         PARAMETERS.model.trunk.hidden_layers,
+                         with_final_activator=True)
 
-        self.trunk = MLP(4,
-                         ParametersHolder().branch_and_trunk_out_features,
-                         ParametersHolder().trunk_hidden_features,
-                         ParametersHolder().trunk_hidden_layers,
-                         activator=torch.nn.ReLU)
+        self.branch = MLP(4,
+                          PARAMETERS.model.mixer.in_features,
+                          PARAMETERS.model.branch.hidden_features,
+                          PARAMETERS.model.branch.hidden_layers,
+                          activator=torch.nn.ReLU,
+                          with_final_activator=True)
 
-        self.mixer = Mixer(ParametersHolder().branch_and_trunk_out_features, 2)
+        self.mixer = Mixer(PARAMETERS.model.mixer.in_features, 2)
 
     def forward(self, z, r, params):
-        branch_in = torch.hstack((z, r))
-        branch_out = self.branch(branch_in)
+        trunk_in = torch.hstack((z, r))
+        trunk_out = self.trunk(trunk_in)
 
-        trunk_out = self.trunk(params)
+        branch_out = self.branch(params)
 
         out = self.mixer(branch_out, trunk_out)
 
@@ -81,10 +85,10 @@ class Pidonet(nn.Module):
 class BesselFeatEmb(nn.Module):
     def __init__(self):
         super().__init__()
-        self.Nbess = ParametersHolder().bessel_features
+        self.Nbess = PARAMETERS.model.bessel_features
         self.wavenumbers = nn.Linear(1, self.Nbess, bias=False)
 
-        self.wavenumbers.weight.data = torch.randn(self.Nbess, dtype=ParametersHolder().dtype)[:, None]
+        self.wavenumbers.weight.data = torch.arange(self.Nbess, dtype=PARAMETERS.torch.dtype)[:, None] / 10
         # nn.init.normal_(self.amplitudes.weight.data)
 
     def forward(self, r):
@@ -93,29 +97,55 @@ class BesselFeatEmb(nn.Module):
         return bessels
 
 
+# TODO FINISH
+class HarmonmicsMixer(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, vec1, vec2):
+        return torch.flatten(vec1 @ vec2.T)
+
+
+class FourierFeatEmb(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.Nfeat = PARAMETERS.model.fourier_features
+        self.wavenumbers = nn.Linear(1, self.Nfeat, bias=False)
+        self.phases = nn.Parameter(torch.randn(self.Nfeat), requires_grad=True)
+
+        self.wavenumbers.weight.data = torch.arange(self.Nfeat, dtype=PARAMETERS.torch.dtype)[:, None] / 10
+
+    def forward(self, z):
+        phase = self.wavenumbers(z) * self.phases
+        return torch.cos(phase)
+
+
 class BessFeatPIDeepONet(nn.Module):
     def __init__(self):
         super().__init__()
         self.bess_feat = BesselFeatEmb()
-        self.branch = MLP(ParametersHolder().bessel_features + 1,
-                          ParametersHolder().branch_and_trunk_out_features,
-                          ParametersHolder().branch_hidden_features,
-                          ParametersHolder().branch_hidden_layers)
+        self.fourier_feat = FourierFeatEmb()
+        self.trunk = MLP(PARAMETERS.model.bessel_features + PARAMETERS.model.fourier_features,
+                         PARAMETERS.model.mixer.in_features,
+                         PARAMETERS.model.trunk.hidden_features,
+                         PARAMETERS.model.trunk.hidden_layers)
 
-        self.trunk = MLP(4,
-                         ParametersHolder().branch_and_trunk_out_features,
-                         ParametersHolder().trunk_hidden_features,
-                         ParametersHolder().trunk_hidden_layers,
-                         activator=torch.nn.SiLU)
+        self.branch = MLP(4,
+                          PARAMETERS.model.mixer.in_features,
+                          PARAMETERS.model.branch.hidden_features,
+                          PARAMETERS.model.branch.hidden_layers,
+                          activator=torch.nn.SiLU)
 
-        self.mixer = Mixer(ParametersHolder().branch_and_trunk_out_features, 2)
+        self.mixer = Mixer(PARAMETERS.model.mixer.in_features, 2)
 
     def forward(self, z, r, params):
         bessel_feat = self.bess_feat(r)
-        branch_in = torch.hstack((z, bessel_feat))
-        branch_out = self.branch(branch_in)
+        fourier_feat = self.fourier_feat(z)
+        trunk_in = torch.hstack((fourier_feat, bessel_feat))
+        trunk_out = self.branch(trunk_in)
 
-        trunk_out = self.trunk(params)
+        branch_out = self.trunk(params)
 
         out = self.mixer(branch_out, trunk_out)
 

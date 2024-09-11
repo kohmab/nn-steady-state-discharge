@@ -1,8 +1,25 @@
 import torch
 from torch.nn.functional import mse_loss
 
-from parametersholder import ParametersHolder
+from configuration import PARAMETERS
 from helpers import grad, plasma_density
+from hyperdomain import HYPERDOMAIN
+
+_ZMIN = HYPERDOMAIN.zmin
+_ZMAX = HYPERDOMAIN.zmax
+
+
+def add_z_weights(z, *residual_tensors):
+    idx = torch.argsort(z, dim=0, descending=True)
+
+    res = torch.hstack(residual_tensors).abs().sum(dim=1)
+    penalty = torch.clone(res).detach()
+    for i in idx[1:]:
+        penalty[i] += penalty[i - 1]
+    res += penalty
+
+    zero = torch.zeros_like(res, device=PARAMETERS.torch.device, dtype=PARAMETERS.torch.dtype)
+    return mse_loss(res, zero)
 
 
 def eq_losses(model, z, r, params):
@@ -26,9 +43,10 @@ def eq_losses(model, z, r, params):
     res_r = 2 * r * dEr_dz + drdEi_dr + nl_part_r
     res_i = -2 * r * dEi_dz + drdEr_dr + nl_part_i
 
-    zero = torch.zeros_like(res_r, device=ParametersHolder().device, dtype=ParametersHolder().dtype)
+    # zero = torch.zeros_like(res_r, device=PARAMETERS.torch.device, dtype=PARAMETERS.torch.dtype)
+    # loss_eq = mse_loss(res_r, zero) + mse_loss(res_i, zero)
 
-    loss_eq = mse_loss(res_r, zero) + mse_loss(res_i, zero)
+    loss_eq = add_z_weights(z, res_r, res_i)
 
     return loss_eq
 
@@ -44,7 +62,7 @@ def axis_bc_losses(model, z, r, params):
 
     dEr_dr, dEi_dr = grad(Er, r), grad(Ei, r)
 
-    zero = torch.zeros_like(Er, device=ParametersHolder().device, dtype=ParametersHolder().dtype)
+    zero = torch.zeros_like(Er, device=PARAMETERS.torch.device, dtype=PARAMETERS.torch.dtype)
 
     return mse_loss(dEr_dr, zero) + mse_loss(dEi_dr, zero)
 
