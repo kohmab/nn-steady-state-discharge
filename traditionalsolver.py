@@ -1,47 +1,42 @@
+# %%
 import numpy as np
-from matplotlib import pyplot as plt
-from scipy import fft
+from pyhank import HankelTransform
+import scipy.special
+import matplotlib.pyplot as plt
+import matplotlib as mpl
 
-if __name__ == "__main__":
-    mu = 0.0  # Order mu of Bessel function
+NU = 0.3
+K0 = 4
 
-    r = np.logspace(-7, 1, 4)  # Input evaluation points
 
-    dln = np.log(r[1] / r[0])  # Step size
+def grid_plasma_density(E, p, k0, shape):
+    tmp = E.reshape(-1, 1)
+    components = np.zeros
 
-    offset = fft.fhtoffset(dln, initial=-6 * np.log(10), mu=mu)
 
-    k = np.exp(offset) / r[::-1]  # Output evaluation points
+# %%
+transformer = HankelTransform(order=0, max_radius=18, n_points=1024)
+r = transformer.r
+k = transformer.kr
 
-    def f(x, mu):
-        """Analytical function: x^(mu+1) exp(-x^2/2)."""
+z = 4
+ksi = 1 - 1j * z
+f = np.exp(-r ** 2 / 2 / ksi) / ksi
+analyt = 1 / ksi * (r ** 2 / ksi - 2) * f
 
-        return x ** (mu + 1) * np.exp(-x ** 2 / 2)
+ht = transformer.qdht(f)
+hlapl = -ht * k ** 2
+lapl = transformer.iqdht(hlapl)
+plt.figure()
+plt.plot(r, lapl.real, 'r')
+plt.plot(r, lapl.imag, 'b')
+plt.plot(r, analyt.real, 'k:')
+plt.plot(r, analyt.imag, 'k:')
+plt.plot(r, np.abs(f), 'g')
+plt.ylim((-10, 10))
 
-    a_r = f(r, mu)
-    fht = fft.fht(a_r, dln, mu=mu, offset=offset)
-    a_k = f(k, mu)
-    rel_err = abs((fht-a_k)/a_k)
-
-    fig, ax = plt.subplots()
-    ax.plot(offset)
-    plt.show()
-
-    # figargs = {'sharex': True, 'sharey': True, 'constrained_layout': True}
-    # fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4), **figargs)
-    # ax1.set_title(r'$r^{\mu+1}\ \exp(-r^2/2)$')
-    # ax1.loglog(r, a_r, 'k', lw=2)
-    # ax1.set_xlabel('r')
-    # ax2.set_title(r'$k^{\mu+1} \exp(-k^2/2)$')
-    # ax2.loglog(k, a_k, 'k', lw=2, label='Analytical')
-    # ax2.loglog(k, fht, 'C3--', lw=2, label='FFTLog')
-    # ax2.set_xlabel('k')
-    # ax2.legend(loc=3, framealpha=1)
-    # ax2.set_ylim([1e-10, 1e1])
-    # ax2b = ax2.twinx()
-    # ax2b.loglog(k, rel_err, 'C0', label='Rel. Error (-)')
-    # ax2b.set_ylabel('Rel. Error (-)', color='C0')
-    # ax2b.tick_params(axis='y', labelcolor='C0')
-    # ax2b.legend(loc=4, framealpha=1)
-    # ax2b.set_ylim([1e-9, 1e-3])
-    # plt.show()
+plt.figure()
+plt.plot(r, np.abs(lapl / analyt), 'g')
+plt.ylim((-10, 10))
+print(np.mean(lapl / analyt))
+plt.show()

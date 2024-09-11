@@ -2,9 +2,9 @@ limits:
   z: [ -4., 8. ]
   r: [ 0., 4. ]
   max_field: [ 1., 1. ]
-  power_p: [ 1., 2. ]
-  coefficient_K0: [ 0.1, 4. ]
-  collision_frequency: [ 0.0, 0.3 ]
+  power_p: [ 1., 1. ]
+  coefficient_K0: [ 0, 0. ]
+  collision_frequency: [ 0.0, 0.0 ]
 
 torch:
   device: 'cuda'
@@ -13,11 +13,11 @@ torch:
 
 data:
   num_of_points:
-    eq: 100000
-    bc: 1024
-    ic: 1024
+    eq: 96000
+    bc: 96000
+    ic: 96000
   batch_size:
-    train: 1024
+    train: 32000
     test: 64
 
 model:

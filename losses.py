@@ -43,10 +43,10 @@ def eq_losses(model, z, r, params):
     res_r = 2 * r * dEr_dz + drdEi_dr + nl_part_r
     res_i = -2 * r * dEi_dz + drdEr_dr + nl_part_i
 
-    # zero = torch.zeros_like(res_r, device=PARAMETERS.torch.device, dtype=PARAMETERS.torch.dtype)
-    # loss_eq = mse_loss(res_r, zero) + mse_loss(res_i, zero)
+    zero = torch.zeros_like(res_r, device=PARAMETERS.torch.device, dtype=PARAMETERS.torch.dtype)
+    loss_eq = mse_loss(res_r, zero) + mse_loss(res_i, zero)
 
-    loss_eq = add_z_weights(z, res_r, res_i)
+    # loss_eq = add_z_weights(z, res_r, res_i)
 
     return loss_eq
 
