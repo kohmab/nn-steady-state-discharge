@@ -8,6 +8,7 @@ from pyhank import HankelTransform
 from tqdm import tqdm
 
 # %%
+PARAMS = #TODO
 NU = 0.3
 K0 = 4
 P = 1
@@ -21,7 +22,19 @@ ZEND = 3.
 
 
 # %%
+def gen_file_name():
+    def get_var_name(var):
+        for name, value in locals().items():
+            if value is var:
+                return name
 
+    vars = (NU, K0, P, EMAX, NR, RMAX, dZ, ZEND)
+    name_items = [f"{get_var_name(var)}={var}" for var in vars]
+
+    return "_".join(name_items) + ".npy"
+
+file_name = gen_file_name()
+# %%
 def beam_field_np(z, r):
     ksi = 1. + 1.j * z
     return EMAX * np.exp(- r ** 2 / 2. / ksi) / ksi
@@ -168,51 +181,41 @@ def nl(field: np.array) -> np.array:
 
 
 # %%
-solver = FourthOrderSolver(dZ, TRANSFORM, lambda x: np.zeros_like(x))
+solver = FourthOrderSolver(dZ, TRANSFORM, nl)
 r = TRANSFORM.r
 z = np.arange(z0, ZEND, dZ)
 Z, R = np.meshgrid(z, r, indexing='ij')
 
 result = np.zeros_like(R, dtype=np.complex64)
 result[0, :] = beam_field_np(z0, r)
+
 # %%
 for i, zi in tqdm(enumerate(z[1:]), total=len(z) - 1):
     result[i + 1, :] = solver(result[i, :])
 
 # %%
-analytic = beam_field_np(Z, R)
-# %%
-# Create a figure and a 2x2 grid of subplots with shared x and y axes
+density = plasma_density_np(result)
 
+# %%
 mpl.use('webagg')
 plt.close('all')
 fig, ax = plt.subplots(2, 2, sharex=True, sharey=True)
 
-# Initialize an array to store the contour plots
 contours = np.empty((2, 2), dtype=object)
 
-# Plot the real and imaginary parts of the numeric and analytic results
 contours[0, 0] = ax[0, 0].contourf(Z, R, result.real)
 contours[0, 1] = ax[0, 1].contourf(Z, R, result.imag)
-contours[1, 0] = ax[1, 0].contourf(Z, R, analytic.real)
-contours[1, 1] = ax[1, 1].contourf(Z, R, analytic.imag)
+contours[1, 0] = ax[1, 0].contourf(Z, R, density)
+contours[1, 1] = ax[1, 1].contourf(Z, R, np.abs(result))
 
-# Set titles for each subplot
 ax[0, 0].set_title('Re numeric')
 ax[0, 1].set_title('Im numeric')
-ax[1, 0].set_title('Re analytic')
-ax[1, 1].set_title('Im analytic')
+ax[1, 0].set_title('Plasma density')
+ax[1, 1].set_title('Abs numeric')
 
 fig.colorbar(contours[0, 0], ax=ax[0, 0])
 fig.colorbar(contours[0, 1], ax=ax[0, 1])
 fig.colorbar(contours[1, 0], ax=ax[1, 0])
 fig.colorbar(contours[1, 1], ax=ax[1, 1])
 
-fig, ax = plt.subplots()
-residual = np.log10(np.abs(result/analytic - 1.))
-cr = ax.contourf(Z, R, residual)
-ax.set_title('Residual')
-fig.colorbar(cr, ax=ax)
-
-# Display the figure
 plt.show()
