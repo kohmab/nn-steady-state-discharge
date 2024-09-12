@@ -1,9 +1,11 @@
 # %%
+from typing import Callable
+
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 from pyhank import HankelTransform
 from tqdm import tqdm
-import matplotlib as mpl
 
 # %%
 NU = 0.3
@@ -100,7 +102,73 @@ class LinearOperator:
 
 
 # %%
-lin_part = LinearOperator(dz=dZ, transform=TRANSFORM)
+class NonlinearOperator:
+    _dz: float
+
+    _nonlinearity: Callable[[np.ndarray], np.ndarray]
+
+    def __init__(self, dz, nonlinear_function):
+        self._dz = dz
+        self._nonlinearity = nonlinear_function
+
+    def __call__(self, fr: np.array) -> np.array:
+        nl = self._nonlinearity(fr)
+        exp = np.exp(nl / 2.j * self._dz)
+        return exp * fr
+
+
+# %%
+class SecondOrderSolver:
+    _dz: float
+    _linear_op: LinearOperator
+    _nonlinear_op: NonlinearOperator
+
+    def __init__(self, dz, transformer, nonlinear_function):
+        self._dz = dz
+        self._linear_op = LinearOperator(dz, transformer)
+        self._nonlinear_op = NonlinearOperator(dz / 2., nonlinear_function)
+
+    def __call__(self, fr: np.array) -> np.array:
+        step1 = self._nonlinear_op(fr)
+        step2 = self._linear_op(step1)
+        step3 = self._nonlinear_op(step2)
+        return step3
+
+
+# %%
+class FourthOrderSolver:
+    _dz: float
+    # see https://doi.org/10.1016/j.matcom.2004.08.002
+    _magic_constant: float = (2. + 2 ** (1. / 3) +
+                              1. / 2. ** (1. / 3)) / 3.
+    _solver1: SecondOrderSolver
+    _solver2: SecondOrderSolver
+
+    def __init__(self, dz, transformer, nonlinear_function):
+        self._dz = dz
+        dz1 = dz * self._magic_constant
+        dz2 = dz * (1 - 2. * self._magic_constant)
+        self._solver1 = SecondOrderSolver(dz1,
+                                          transformer,
+                                          nonlinear_function)
+        self._solver2 = SecondOrderSolver(dz2,
+                                          transformer,
+                                          nonlinear_function)
+
+    def __call__(self, fr: np.array) -> np.array:
+        step1 = self._solver1(fr)
+        step2 = self._solver2(step1)
+        step3 = self._solver1(step2)
+        return step3
+
+
+# %%
+def nl(field: np.array) -> np.array:
+    return (1. + 1.j * NU) * plasma_density_np(field)
+
+
+# %%
+solver = FourthOrderSolver(dZ, TRANSFORM, lambda x: np.zeros_like(x))
 r = TRANSFORM.r
 z = np.arange(z0, ZEND, dZ)
 Z, R = np.meshgrid(z, r, indexing='ij')
@@ -109,7 +177,7 @@ result = np.zeros_like(R, dtype=np.complex64)
 result[0, :] = beam_field_np(z0, r)
 # %%
 for i, zi in tqdm(enumerate(z[1:]), total=len(z) - 1):
-    result[i + 1, :] = lin_part(result[i, :])
+    result[i + 1, :] = solver(result[i, :])
 
 # %%
 analytic = beam_field_np(Z, R)
@@ -117,6 +185,7 @@ analytic = beam_field_np(Z, R)
 # Create a figure and a 2x2 grid of subplots with shared x and y axes
 
 mpl.use('webagg')
+plt.close('all')
 fig, ax = plt.subplots(2, 2, sharex=True, sharey=True)
 
 # Initialize an array to store the contour plots
@@ -140,7 +209,7 @@ fig.colorbar(contours[1, 0], ax=ax[1, 0])
 fig.colorbar(contours[1, 1], ax=ax[1, 1])
 
 fig, ax = plt.subplots()
-residual = np.log10(np.abs(result - analytic))
+residual = np.log10(np.abs(result/analytic - 1.))
 cr = ax.contourf(Z, R, residual)
 ax.set_title('Residual')
 fig.colorbar(cr, ax=ax)
