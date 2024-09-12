@@ -8,15 +8,15 @@ from pyhank import HankelTransform
 from tqdm import tqdm
 
 # %%
-PARAMS = #TODO
-NU = 0.3
+# PARAMS = #TODO
+NU = -0
 K0 = 4
-P = 1
+P = 5
 EMAX = 2.
 
-NR = 4096
+NR = 4096 * 2
 RMAX = 12.
-dZ = 1.e-2
+dZ = 1.e-3
 
 ZEND = 3.
 
@@ -33,7 +33,10 @@ def gen_file_name():
 
     return "_".join(name_items) + ".npy"
 
+
 file_name = gen_file_name()
+
+
 # %%
 def beam_field_np(z, r):
     ksi = 1. + 1.j * z
@@ -205,8 +208,8 @@ contours = np.empty((2, 2), dtype=object)
 
 contours[0, 0] = ax[0, 0].contourf(Z, R, result.real)
 contours[0, 1] = ax[0, 1].contourf(Z, R, result.imag)
-contours[1, 0] = ax[1, 0].contourf(Z, R, density)
-contours[1, 1] = ax[1, 1].contourf(Z, R, np.abs(result))
+contours[1, 0] = ax[1, 0].contourf(Z, R, density, 256)
+contours[1, 1] = ax[1, 1].contourf(Z, R, np.abs(result), 256)
 
 ax[0, 0].set_title('Re numeric')
 ax[0, 1].set_title('Im numeric')
@@ -217,5 +220,10 @@ fig.colorbar(contours[0, 0], ax=ax[0, 0])
 fig.colorbar(contours[0, 1], ax=ax[0, 1])
 fig.colorbar(contours[1, 0], ax=ax[1, 0])
 fig.colorbar(contours[1, 1], ax=ax[1, 1])
+# %%
 
+fig, ax = plt.subplots(2, 1, sharex=True, sharey=True)
+ax[0].plot(z, np.abs(result[:, 0]), 'r')
+ax[1].plot(z, density[:, 0], 'k')
+plt.grid()
 plt.show()
