@@ -6,51 +6,40 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pyhank import HankelTransform
 from tqdm import tqdm
+from box import Box
 
 # %%
 # PARAMS = #TODO
-NU = -0
-K0 = 4
-P = 5
-EMAX = 2.
-
-NR = 4096 * 2
-RMAX = 12.
-dZ = 1.e-3
-
-ZEND = 3.
-
-
-# %%
-def gen_file_name():
-    def get_var_name(var):
-        for name, value in locals().items():
-            if value is var:
-                return name
-
-    vars = (NU, K0, P, EMAX, NR, RMAX, dZ, ZEND)
-    name_items = [f"{get_var_name(var)}={var}" for var in vars]
-
-    return "_".join(name_items) + ".npy"
-
-
-file_name = gen_file_name()
+PARAMS = Box({
+    'NU': -0.1,
+    'K0': 10.,
+    'P': 5,
+    'EMAX': 2.,
+    'NR': 128,
+    'RMAX': 12,
+    'dZ': 1e-1,
+    'ZEND': 3.
+}, frozen_box=True)
+print(f"Calculating for parameters: \n{PARAMS}.\n")
+filename = ('./traditional_data/'
+            + '_'.join([f'{par}={val}' for par, val in PARAMS.items()])
+            + ".npz")
 
 
 # %%
 def beam_field_np(z, r):
     ksi = 1. + 1.j * z
-    return EMAX * np.exp(- r ** 2 / 2. / ksi) / ksi
+    return PARAMS.EMAX * np.exp(- r ** 2 / 2. / ksi) / ksi
 
 
 def plasma_density_np(E):
     absEsq = np.real(E * E.conjugate())
-    density = np.where(absEsq > 1., K0 * (absEsq ** P - 1.), 0.0)
+    density = np.where(absEsq > 1., PARAMS.K0 * (absEsq ** PARAMS.P - 1.), 0.0)
     return density
 
 
 # %%
-def find_start_z(tol=1e-8, start_z=-10 * EMAX, back_step=0.1):
+def find_start_z(tol=1e-8, start_z=-10 * PARAMS.EMAX, back_step=0.1):
     zl = start_z
     zr = 0.
 
@@ -68,7 +57,7 @@ z0 = find_start_z()
 print(f"Start Z point is {z0}")
 
 # %%
-TRANSFORM = HankelTransform(order=0, max_radius=RMAX, n_points=NR)
+TRANSFORM = HankelTransform(order=0, max_radius=PARAMS.RMAX, n_points=PARAMS.NR)
 
 
 # %%
@@ -132,6 +121,14 @@ class NonlinearOperator:
         exp = np.exp(nl / 2.j * self._dz)
         return exp * fr
 
+    @property
+    def dz(self):
+        return self._dz
+
+    @dz.setter
+    def dz(self, dz):
+        self._dz = dz
+
 
 # %%
 class SecondOrderSolver:
@@ -149,6 +146,15 @@ class SecondOrderSolver:
         step2 = self._linear_op(step1)
         step3 = self._nonlinear_op(step2)
         return step3
+
+    @property
+    def dz(self):
+        return self._dz
+
+    @dz.setter
+    def dz(self, dz):
+        self._linear_op.dz = dz
+        self._nonlinear_op.dz = dz
 
 
 # %%
@@ -177,16 +183,24 @@ class FourthOrderSolver:
         step3 = self._solver1(step2)
         return step3
 
+    @property
+    def dz(self):
+        return self._dz
+
+    @dz.setter
+    def dz(self, dz):
+        self._dz = dz
+
 
 # %%
 def nl(field: np.array) -> np.array:
-    return (1. + 1.j * NU) * plasma_density_np(field)
+    return (1. + 1.j * PARAMS.NU) * plasma_density_np(field)
 
 
 # %%
-solver = FourthOrderSolver(dZ, TRANSFORM, nl)
+solver = FourthOrderSolver(PARAMS.dZ, TRANSFORM, nl)
 r = TRANSFORM.r
-z = np.arange(z0, ZEND, dZ)
+z = np.arange(z0, PARAMS.ZEND, PARAMS.dZ)
 Z, R = np.meshgrid(z, r, indexing='ij')
 
 result = np.zeros_like(R, dtype=np.complex64)
@@ -196,6 +210,9 @@ result[0, :] = beam_field_np(z0, r)
 for i, zi in tqdm(enumerate(z[1:]), total=len(z) - 1):
     result[i + 1, :] = solver(result[i, :])
 
+# %%
+with open(filename, 'wb') as f:
+    np.savez(f, z=z, r=r, E=result)
 # %%
 density = plasma_density_np(result)
 
