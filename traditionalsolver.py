@@ -11,13 +11,13 @@ from box import Box
 # %%
 # PARAMS = #TODO
 PARAMS = Box({
-    'NU': -0.1,
+    'NU': 0.3,
     'K0': 10.,
-    'P': 5,
+    'P': 2,
     'EMAX': 2.,
-    'NR': 128,
+    'NR': 2048,
     'RMAX': 12,
-    'dZ': 1e-1,
+    'dZ': 3e-3,
     'ZEND': 3.
 }, frozen_box=True)
 print(f"Calculating for parameters: \n{PARAMS}.\n")
@@ -194,7 +194,7 @@ class FourthOrderSolver:
 
 # %%
 def nl(field: np.array) -> np.array:
-    return (1. + 1.j * PARAMS.NU) * plasma_density_np(field)
+    return (1. - 1.j * PARAMS.NU) * plasma_density_np(field)
 
 
 # %%
