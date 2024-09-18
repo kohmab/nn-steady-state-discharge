@@ -13,12 +13,12 @@ from box import Box
 PARAMS = Box({
     'NU': 0.3,
     'K0': 10.,
-    'P': 2,
-    'EMAX': 2.,
-    'NR': 2048,
-    'RMAX': 12,
-    'dZ': 3e-3,
-    'ZEND': 3.
+    'P': 8,
+    'EMAX': 1.1,
+    'NR': 4096,
+    'RMAX': 6,
+    'dZ': 2.5e-4,
+    'ZEND': 0.5
 }, frozen_box=True)
 print(f"Calculating for parameters: \n{PARAMS}.\n")
 filename = ('./traditional_data/'

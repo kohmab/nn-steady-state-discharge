@@ -11,6 +11,7 @@ _DTYPE = PARAMETERS.torch.dtype
 _LOWER_BOUNDARIES = HYPERDOMAIN.lb
 _UPPER_BOUNDARIES = HYPERDOMAIN.ub
 _DIM = HYPERDOMAIN.dim
+_N_POINTS_ON_SEGMENT = PARAMETERS.data.num_of_points.eq // PARAMETERS.train.z_segments
 
 
 class AbstractDataset(Dataset, ABC):
@@ -97,6 +98,22 @@ class IcData(AbstractDataset):
         self._points[0, :] = _LOWER_BOUNDARIES[0]
         self._target = beam_field(self._points[:, AXIDX.z:AXIDX.max_field],
                                   max_field=self._points[:, [AXIDX.max_field]])
+
+
+class SegmentData(AbstractDataset):
+    _lb: torch.Tensor
+    _ub: torch.Tensor
+
+    def __init__(self, lb, ub, Npoints=_N_POINTS_ON_SEGMENT):
+        super().__init__(Npoints)
+        self._lb = lb
+        self._ub = ub
+
+    def _generate_data(self):
+        return
+
+    def _generate_points(self):
+        self._points = uniform(self.N, self._lb, self._ub, _DIM)
 
 
 class JointDataLoaders:

@@ -22,7 +22,7 @@ def add_z_weights(z, *residual_tensors):
     return mse_loss(res, zero)
 
 
-def eq_losses(model, z, r, params):
+def eq_residual(model, z, r, params):
     out = model(z, r, params)
 
     Er, Ei = out[:, [0]], out[:, [1]]
@@ -42,6 +42,12 @@ def eq_losses(model, z, r, params):
     nl_part_i = -n * (Er + nu * Er)
     res_r = 2 * r * dEr_dz + drdEi_dr + nl_part_r
     res_i = -2 * r * dEi_dz + drdEr_dr + nl_part_i
+
+    return res_r, res_i
+
+
+def eq_losses(model, z, r, params):
+    res_r, res_i = eq_residual(model, z, r, params)
 
     zero = torch.zeros_like(res_r, device=PARAMETERS.torch.device, dtype=PARAMETERS.torch.dtype)
     loss_eq = mse_loss(res_r, zero) + mse_loss(res_i, zero)
