@@ -7,6 +7,7 @@ from configuration import PARAMETERS
 _DEVICE = PARAMETERS.torch.device
 _DTYPE = PARAMETERS.torch.dtype
 
+
 def prepare_tensor(array, requires_grad=True):
     if not torch.is_tensor(array):
         tensor = torch.from_numpy(array)
@@ -54,7 +55,7 @@ def latin_hypercube_sampling(n_dimensions, n_samples):
     return samples
 
 
-def uniform(num_points, lower_limits, upper_limits, dim=1):
+def uniform(num_points: int, lower_limits, upper_limits, dim=1) -> torch.Tensor:
     if not torch.is_tensor(lower_limits):
         lower_limits = torch.from_numpy(lower_limits).to(device=_DEVICE, dtype=_DTYPE)
     if not torch.is_tensor(upper_limits):

@@ -18,7 +18,7 @@ data:
     ic: 96000
 
   batch_size:
-    train: 32000
+    train: 2048
     test: 64
 
 training:

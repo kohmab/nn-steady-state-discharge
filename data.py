@@ -11,7 +11,6 @@ _DTYPE = PARAMETERS.torch.dtype
 _LOWER_BOUNDARIES = HYPERDOMAIN.lb
 _UPPER_BOUNDARIES = HYPERDOMAIN.ub
 _DIM = HYPERDOMAIN.dim
-_N_POINTS_ON_SEGMENT = PARAMETERS.data.num_of_points.eq // PARAMETERS.train.z_segments
 
 
 class AbstractDataset(Dataset, ABC):
@@ -64,24 +63,27 @@ class AbstractDataset(Dataset, ABC):
 
 
 class DomainData(AbstractDataset):
-    def __init__(self):
-        super().__init__(PARAMETERS.data.num_of_points.eq)
+
+    def __init__(self, Npoints):
+        super().__init__(Npoints)
 
     def _generate_data(self):
         return
 
 
 class BcAtAxisData(AbstractDataset):
-    def __init__(self):
-        super().__init__(PARAMETERS.data.num_of_points.bc)
+
+    def __init__(self, Npoints):
+        super().__init__(Npoints)
 
     def _generate_data(self):
         self._points[1, :] = _LOWER_BOUNDARIES[1]
 
 
 class BcAtUpperRLimitData(AbstractDataset):
-    def __init__(self):
-        super().__init__(PARAMETERS.data.num_of_points.bc)
+
+    def __init__(self, Npoints):
+        super().__init__(Npoints)
 
     def _generate_data(self):
         self._points[1, :] = _UPPER_BOUNDARIES[1]
@@ -91,8 +93,8 @@ class BcAtUpperRLimitData(AbstractDataset):
 
 class IcData(AbstractDataset):
 
-    def __init__(self):
-        super().__init__(PARAMETERS.data.num_of_points.ic)
+    def __init__(self, Npoints):
+        super().__init__(Npoints)
 
     def _generate_data(self):
         self._points[0, :] = _LOWER_BOUNDARIES[0]
@@ -100,33 +102,33 @@ class IcData(AbstractDataset):
                                   max_field=self._points[:, [AXIDX.max_field]])
 
 
-class SegmentData(AbstractDataset):
-    _lb: torch.Tensor
-    _ub: torch.Tensor
+class SegmentData:
+    def __init__(self, Npoints):
+        self._N = Npoints
 
-    def __init__(self, lb, ub, Npoints=_N_POINTS_ON_SEGMENT):
-        super().__init__(Npoints)
-        self._lb = lb
-        self._ub = ub
-
-    def _generate_data(self):
-        return
-
-    def _generate_points(self):
-        self._points = uniform(self.N, self._lb, self._ub, _DIM)
+    def __call__(self, lb, ub):
+        points = uniform(self._N, lb, ub, _DIM).requires_grad_(True)
+        return points[:, [AXIDX.z]], points[:, [AXIDX.r]], points[:, AXIDX.max_field:]
 
 
 class JointDataLoaders:
-    def __init__(self, batch_size, main_dataset, additional_datasets: Dict[str, Dataset]):
-        self._dataloaders = {"main": DataLoader(main_dataset, batch_size=batch_size)}
-        self._data = {"main": None}
-        self._iterators = {"main": iter(self._dataloaders["main"])}
-        self._len = len(self._dataloaders["main"])
+    _main_key: str
 
-        for name, dataset in additional_datasets.items():
+    def __init__(self, batch_size, main_key, datasets: Dict[str, Dataset]):
+        assert main_key in datasets
+
+        self._main_key = main_key
+
+        self._dataloaders = {}
+        self._data = {}
+        self._iterators = {}
+
+        for name, dataset in datasets.items():
             self._dataloaders[name] = DataLoader(dataset, batch_size=batch_size,
                                                  shuffle=False)
             self._data[name] = None
+
+        self._len = len(self._dataloaders[self._main_key])
 
         self._reset_all()
 
@@ -156,7 +158,7 @@ class JointDataLoaders:
             try:
                 self._data[name] = self._prepare_batch(name)
             except StopIteration:
-                if name == "main":
+                if name == self._main_key:
                     self._reset_all()
                     raise StopIteration
                 else:
