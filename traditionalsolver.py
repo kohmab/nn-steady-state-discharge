@@ -1,24 +1,25 @@
 # %%
+import os.path
 from typing import Callable
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from box import Box
 from pyhank import HankelTransform
 from tqdm import tqdm
-from box import Box
 
 # %%
-# PARAMS = #TODO
 PARAMS = Box({
-    'NU': 0.3,
+    'NU': 0,
     'K0': 10.,
-    'P': 8,
+    'P': 6,
     'EMAX': 1.1,
-    'NR': 4096,
+    'NR': 256,
     'RMAX': 6,
-    'dZ': 2.5e-4,
-    'ZEND': 0.5
+    'dZ': 1e-3,
+    'ZEND': 0.5,
+    'SolOrd' : '4' # '2' or '4'
 }, frozen_box=True)
 print(f"Calculating for parameters: \n{PARAMS}.\n")
 filename = ('./traditional_data/'
@@ -36,6 +37,10 @@ def plasma_density_np(E):
     absEsq = np.real(E * E.conjugate())
     density = np.where(absEsq > 1., PARAMS.K0 * (absEsq ** PARAMS.P - 1.), 0.0)
     return density
+
+
+def plasma_density_smoothed_np(E):
+    pass
 
 
 # %%
@@ -198,7 +203,10 @@ def nl(field: np.array) -> np.array:
 
 
 # %%
-solver = FourthOrderSolver(PARAMS.dZ, TRANSFORM, nl)
+solvers = {'2': SecondOrderSolver, '4': FourthOrderSolver}
+args = PARAMS.dZ, TRANSFORM, nl
+solver = solvers[PARAMS.SolOrd](*args)
+
 r = TRANSFORM.r
 z = np.arange(z0, PARAMS.ZEND, PARAMS.dZ)
 Z, R = np.meshgrid(z, r, indexing='ij')
@@ -207,18 +215,27 @@ result = np.zeros_like(R, dtype=np.complex64)
 result[0, :] = beam_field_np(z0, r)
 
 # %%
-for i, zi in tqdm(enumerate(z[1:]), total=len(z) - 1):
-    result[i + 1, :] = solver(result[i, :])
+if os.path.isfile(filename):
+    with np.load(filename) as data:
+        result = data['E']
+        r = data['r']
+        z = data['z']
+        Z, R = np.meshgrid(z, r, indexing='ij')
+        print("Previously obtained data used")
+else:
+    for i, zi in tqdm(enumerate(z[1:]), total=len(z) - 1):
+        result[i + 1, :] = solver(result[i, :])
+    with open(filename, 'wb') as f:
+        np.savez(f, z=z, r=r, E=result)
 
-# %%
-with open(filename, 'wb') as f:
-    np.savez(f, z=z, r=r, E=result)
 # %%
 density = plasma_density_np(result)
 
 # %%
 mpl.use('webagg')
 plt.close('all')
+
+# %%
 fig, ax = plt.subplots(2, 2, sharex=True, sharey=True)
 
 contours = np.empty((2, 2), dtype=object)
@@ -243,4 +260,29 @@ fig, ax = plt.subplots(2, 1, sharex=True, sharey=True)
 ax[0].plot(z, np.abs(result[:, 0]), 'r')
 ax[1].plot(z, density[:, 0], 'k')
 plt.grid()
+
+# %%
+r_transform = TRANSFORM.qdht(result, axis=-1)
+k = TRANSFORM.kr
+Z, K = np.meshgrid(z, k, indexing='ij')
+
+fig, ax = plt.subplots(2, 1, sharex=True, sharey=True)
+
+cntr = [ax[0].contourf(Z, K, np.real(r_transform), 256, cmap="jet"),
+        ax[1].contourf(Z, K, np.imag(r_transform), 256, cmap="jet")]
+
+ax[0].set_title('r-spectrum Re')
+ax[1].set_title('r-spectrum Im')
+
+for i in range(2):
+    fig.colorbar(cntr[i], ax=ax[i])
+
+fig, ax = plt.subplots()
+fig.set_size_inches((10, 6))
+cntr = ax.contourf(Z, K, np.log10(np.abs(r_transform)), 256, cmap="jet")
+fig.colorbar(cntr, ax=ax)
+ax.set_title('r-spectrum Abs')
+ax.set_ylim((0, 200))
+# %%
 plt.show()
+# %%
